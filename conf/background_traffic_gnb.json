@@ -1,0 +1,129 @@
+{
+  "_comment": [
+    "SCENARIO DESIGN — 1 PRB = 1.2 Mbps, total SLA = 60 Mbps",
+    "gNB 21  needs 25 PRBs  (ue1=10 + ue2=20 Mbps)",
+    "gNB 223 needs 25 PRBs  (ue3=15 + ue4=9 + ue5=6 Mbps)",
+    "",
+    "Phase 1  (0–49)   : Both healthy ~35 PRB — warmup, no moves, cost-rebalance only",
+    "Phase 2  (50–99)  : gNB 21 tight ~22 PRB, 223 surplus ~40 — SWAP expected",
+    "Phase 3  (100–149): gNB 21 severe ~16 PRB, 223 abundant ~42 — DIRECT GHOST MOVE expected",
+    "Phase 4  (150–229): Both abundant ~45 PRB — SLA satisfied, COST REBALANCE dominant",
+    "Phase 5  (230–299): gNB 223 tight ~18 PRB, 21 abundant ~42 — SWAP or DIRECT MOVE back"
+  ],
+  "cap_generator": {
+    "n_steps": 300,
+    "seeds": [42, 123],
+    "ops": {
+      "21":  { "max_cap": 55, "init_cap": 35, "min_cap": 12 },
+      "223": { "max_cap": 55, "init_cap": 35, "min_cap": 12 }
+    },
+    "baseline": { "21": 35, "223": 35 },
+    "floor_frac": { "21": 0.30, "223": 0.30 },
+    "lam":      { "21": 0.40, "223": 0.40 },
+    "max_step": { "21": 3,    "223": 3    },
+    "kappa":    { "21": 0.35, "223": 0.35 },
+    "bursts": {
+      "21":  { "burst_rate": 0.05, "dur_min": 2, "dur_max": 5, "depth_min": 1, "depth_max": 3, "recover": true },
+      "223": { "burst_rate": 0.05, "dur_min": 2, "dur_max": 5, "depth_min": 1, "depth_max": 3, "recover": true }
+    },
+    "upbursts": {
+      "21":  { "burst_rate": 0.03, "dur_min": 2, "dur_max": 4, "depth_min": 1, "depth_max": 2, "recover": true },
+      "223": { "burst_rate": 0.03, "dur_min": 2, "dur_max": 4, "depth_min": 1, "depth_max": 2, "recover": true }
+    },
+    "scenario": {
+      "debug": true,
+      "phases": [
+        {
+          "name": "P1: warmup — both healthy 35 PRB, no deficit",
+          "_comment": "Both gNBs at 35 PRB >> 25 PRBs needed. Broker warms up, cost-rebalance only. No UE moves expected.",
+          "start": 0,
+          "end": 49,
+          "baseline": { "21": 35, "223": 35 },
+          "burst_mult":   { "21": 0.5, "223": 0.5 },
+          "upburst_mult": { "21": 0.5, "223": 0.5 },
+          "kappa": { "21": 0.35, "223": 0.35 }
+        },
+        {
+          "name": "P2: gNB 21 tightens to 22 PRB — SWAP window",
+          "_comment": "21 drops to 22 PRB, can only serve ~26 Mbps. Needs 30. Deficit ~4 Mbps. 223 stays at 40 PRB (headroom 15 Mbps). Broker should SWAP: reduce ue2 rate on 21, increase ue4/ue3 on 223.",
+          "start": 50,
+          "end": 99,
+          "baseline_ramp": {
+            "21":  { "from": 35, "to": 22 },
+            "223": { "from": 35, "to": 40 }
+          },
+          "burst_mult":   { "21": 2.0, "223": 0.4 },
+          "upburst_mult": { "21": 0.4, "223": 0.8 },
+          "kappa": { "21": 0.45, "223": 0.30 },
+          "floor_frac": { "21": 0.30, "223": 0.28 }
+        },
+        {
+          "name": "P3: gNB 21 severe 15-16 PRB — DIRECT GHOST MOVE window",
+          "_comment": "21 drops to 16 PRB, can only serve ~19 Mbps. Deficit ~11 Mbps. Too large for swap alone. 223 at 42 PRB (headroom 20 Mbps, can absorb a full UE). Broker should trigger ghost move of ue2 (20 Mbps) from 21 to 223.",
+          "start": 100,
+          "end": 149,
+          "baseline_ramp": {
+            "21":  { "from": 22, "to": 16 },
+            "223": { "from": 40, "to": 42 }
+          },
+          "burst_mult":   { "21": 2.5, "223": 0.3 },
+          "upburst_mult": { "21": 0.2, "223": 0.5 },
+          "kappa": { "21": 0.50, "223": 0.25 },
+          "floor_frac": { "21": 0.28, "223": 0.26 }
+        },
+        {
+          "name": "P4: both abundant 45+ PRB — COST REBALANCE dominant",
+          "_comment": "Both gNBs well above 25 PRBs needed. No SLA deficit. Broker sees gNB 21 is expensive (cap_base=25, nu=1.3) vs 223 (cap_base=25, nu=1.0). Should shift load toward cheaper gNB 223.",
+          "start": 150,
+          "end": 229,
+          "baseline_ramp": {
+            "21":  { "from": 16, "to": 45 },
+            "223": { "from": 42, "to": 47 }
+          },
+          "burst_mult":   { "21": 0.4, "223": 0.4 },
+          "upburst_mult": { "21": 0.8, "223": 0.8 },
+          "kappa": { "21": 0.30, "223": 0.30 },
+          "floor_frac": { "21": 0.28, "223": 0.28 }
+        },
+        {
+          "name": "P5: gNB 223 tightens to 18 PRB — SWAP or DIRECT MOVE in reverse",
+          "_comment": "Now 223 drops to 18 PRB, can only serve ~22 Mbps. Needs 30. Deficit ~8 Mbps. gNB 21 at 42 PRB has headroom. Broker should move load back to 21 via swap or ghost move.",
+          "start": 230,
+          "end": 299,
+          "baseline_ramp": {
+            "21":  { "from": 45, "to": 42 },
+            "223": { "from": 47, "to": 18 }
+          },
+          "burst_mult":   { "21": 0.4, "223": 2.5 },
+          "upburst_mult": { "21": 0.8, "223": 0.3 },
+          "kappa": { "21": 0.28, "223": 0.50 },
+          "floor_frac": { "21": 0.26, "223": 0.28 }
+        }
+      ]
+    }
+  },
+  "pricing": {
+    "_comment": [
+      "gNB 21: expensive — high nu=1.3, high pi_min. Scarcity hits hard when cap is low.",
+      "gNB 223: cheaper — lower nu=1.0, lower pi_min. Broker prefers 223 when both healthy.",
+      "This asymmetry makes cost-rebalancing visible in Phase 4:",
+      "  even when both gNBs have surplus, broker shifts load from 21 to 223 to reduce cost."
+    ],
+    "ops": {
+      "21": {
+        "cap_base": 25,
+        "nu": 1.30,
+        "pi_min": 1.20,
+        "pi_be": 0.75,
+        "eps": 0.001
+      },
+      "223": {
+        "cap_base": 25,
+        "nu": 1.00,
+        "pi_min": 1.00,
+        "pi_be": 0.60,
+        "eps": 0.001
+      }
+    }
+  }
+}

@@ -1,0 +1,70 @@
+{
+    "xapp_name": "oranslice-xapp",
+    "version": "1.0.0",
+    "containers": [
+      {
+        "name": "oranslice-xapp",
+        "image": {
+          "registry": "myregistry.local:5000",
+          "name": "oranslice-xapp",
+          "tag": "latest"
+        }
+      }
+    ],
+    "messaging": {
+      "ports": [
+        {
+          "name": "http",
+          "container": "oranslice-xapp",
+          "port": 8080,
+          "description": "http service for ORANSlice xApp"
+        },
+        {
+          "name": "rmr-data",
+          "container": "oranslice-xapp",
+          "port": 4560,
+          "rxMessages": [
+            "RIC_SUB_RESP",
+            "A1_POLICY_REQ",
+            "RIC_HEALTH_CHECK_REQ",
+            "RIC_INDICATION"
+          ],
+          "txMessages": [
+            "RIC_SUB_REQ",
+            "A1_POLICY_RESP",
+            "A1_POLICY_QUERY",
+            "RIC_HEALTH_CHECK_RESP",
+            "RIC_CONTROL"
+          ],
+          "policies": [1],
+          "description": "rmr receive data port for ORANSlice xApp"
+        },
+        {
+          "name": "rmr-route",
+          "container": "oranslice-xapp",
+          "port": 4561,
+          "description": "rmr route port for ORANSlice xApp"
+        }
+      ]
+    },
+    "rmr": {
+      "protPort": "tcp:4560",
+      "maxSize": 2072,
+      "numWorkers": 1,
+      "txMessages": [
+        "RIC_SUB_REQ",
+        "A1_POLICY_RESP",
+        "A1_POLICY_QUERY",
+        "RIC_HEALTH_CHECK_RESP",
+        "RIC_CONTROL"
+      ],
+      "rxMessages": [
+        "RIC_SUB_RESP",
+        "A1_POLICY_REQ",
+        "RIC_HEALTH_CHECK_REQ",
+        "RIC_INDICATION"
+      ],
+      "policies": [1]
+    }
+  }
+  

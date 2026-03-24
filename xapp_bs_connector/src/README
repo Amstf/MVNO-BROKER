@@ -1,0 +1,56 @@
+==================================================================================
+
+        Copyright (c) 2018-2019 AT&T Intellectual Property.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+==================================================================================
+
+This repository consists of HelloWorld Xapp developed in C++. Its envisioned to be the most simplest example Xapp. 
+It is required to have following features
+
+1) E2 Subscription Handling
+2) A1 Policy Handling
+3) SDL Access
+ 4) Health Check
+ 5)...
+
+Multi-gNB behavior and SubMgr expectations
+------------------------------------------
+* The connector now treats each gNB as a distinct subscription target, deduplicating RNIB inventory names before issuing requests and incrementing the `ricInstanceId` per node to avoid identifier reuse inside the SubMgr.
+* Subscription requests are serialized: the xApp waits for any pending transaction to finish before sending the next gNB, preventing the SubMgr error about an "ongoing" transaction across different MEIDs.
+* Each request uses the gNB ID as both the MEID and transaction key so the SubMgr tracks one outstanding procedure per E2 node, matching its rules.
+* Testing expectation with two connected gNBs: you should see the xApp send a subscription to the first gNB, wait until the SubMgr responds (success or failure), then proceed to the second gNB. There should be no repeated "ongoing transaction" errors unless the SubMgr itself rejects a request or a prior transaction never completes.
+
+Two-gNB reference flow (xApp ⇄ SubMgr ⇄ E2Term)
+-----------------------------------------------
+This is how the Near-RT RIC stack scales from one to two gNBs and how the connector is expected to behave:
+
+* One xApp instance handles every gNB. It does not bind to a single node or open per-node sockets; RMR multiplexes messages that include the MEID so the xApp can separate streams.
+* The xApp issues one E2 SubscriptionRequest per gNB (e.g., `meid=gnbA` and `meid=gnbB`). SubMgr builds two independent procedures and E2Term uses separate SCTP associations per gNB.
+* Indications arrive interleaved over RMR, each carrying the MEID. The xApp must route processing by MEID so per-gNB state (windows, UE metrics, control decisions) stays isolated.
+* Control messages follow the same rule: `RIC_CONTROL_REQ` includes the MEID, and SubMgr/E2Term ensure the correct SCTP stream is used.
+* If one gNB disconnects, the other continues unaffected. Any retries or resubscriptions must remain per-MEID so transactions never collide.
+
+Bottom line for troubleshooting multi-gNB issues
+------------------------------------------------
+* The current connector logic aligns with the architecture above: it deduplicates MEIDs, assigns unique `ricInstanceId` values per node, and serializes subscription sends to satisfy SubMgr's "one ongoing procedure per E2 node" rule.
+* If you still see "ongoing transaction" errors, look for stalled SubMgr responses or duplicated MEID entries in RNIB rather than adding new xApp instances; the single xApp model is the intended deployment.
+
+
+
+
+Steps for installation/running HWXapp.
+
+$ source ./run_xapp.sh
+$ make
+$ ./hw_xapp_main

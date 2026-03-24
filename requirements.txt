@@ -1,0 +1,4 @@
+numpy
+pymongo
+kubernetes
+protobuf<4.21

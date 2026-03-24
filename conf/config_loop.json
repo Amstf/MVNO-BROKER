@@ -1,0 +1,57 @@
+{
+  "gnb_targets": {
+    "21": {
+      "meid": "gnb_734_733_61623130",
+      "cell_total_prbs": 106
+    },
+    "223": {
+      "meid": "gnb_734_733_61323230",
+      "cell_total_prbs": 106
+    }
+  },
+  "slice": {
+    "sst": 1,
+    "sd": "0xFFFFFF"
+  },
+  "ue": {},
+  "ue_control": {
+    "initial_rate_mbps": 70,
+    "duration_s": 8000,
+    "by_operator": {
+      "21": {
+        "pod": "ue1",
+        "port": 5502
+      },
+      "223": {
+        "pod": "ue2",
+        "port": 5504
+      }
+    }
+  },
+  "broker": {
+    "tick_period_s": 2.5,
+    "snapshot_require_all_gnbs": true,
+    "max_freshness_ms": 1000,
+    "slice_sla_mbps": 60.0,
+    "steering_tolerance": 0.05,
+    "min_rate_delta_mbps": 3,
+    "max_rate_step_mbps_per_tick": 1000.0,
+    "observe_window_ticks": 3,
+    "ghost_move_timeout_s": 30,
+    "ghost_retry_wait_s": 5,
+    "warmup_ticks": 0,
+    "cap_step_period_s": 2.5,
+    "cap_control_period_s": 2.5,
+    "broker_decision_every_n_ticks": 2
+  },
+  "bmin_prb": {
+    "21": 10.0,
+    "223": 10.0
+  },
+  "min_prb": {
+    "21": 10.0,
+    "223": 10.0
+  },
+  "clamp_throughput_enabled": true,
+  "clamp_throughput_mbps": 35.0
+}
