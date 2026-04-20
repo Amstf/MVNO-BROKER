@@ -1,7 +1,7 @@
-# Configuration Reference
+# `conf/config_loop.json` Usage + Objective Examples
 
-Detailed reference for `conf/config_loop.json` and related files.
-Pricing coefficients are loaded from `conf/background_traffic_gnb.json` (see section 7).
+This file explains `conf/config_loop.json` and where each part is used.
+Pricing coefficients are now loaded from `conf/background_traffic_gnb.json` (see note below).
 
 ---
 
@@ -10,7 +10,7 @@ Pricing coefficients are loaded from `conf/background_traffic_gnb.json` (see sec
 **Used by:** target resolution in `xapp_runtime/config_contract.py`.
 
 - `gnb_targets.<op_id>.meid`
-  - Purpose: map indication MEID to logical operator id.
+  - Purpose: map indication MEID ↔ logical operator id.
   - Example objective: add a third gNB (`"310"`) and its MEID so it is included in control.
 - `gnb_targets.<op_id>.cell_total_prbs`
   - Purpose: initialize PRB capacity context in `GnbState`.
@@ -27,7 +27,7 @@ Example objective: run experiment on a different slice while keeping policy unch
 
 ## 3) `ue`
 **Objective:** reserved runtime block (kept for compatibility).
-**Used by:** currently not used for placements; placements are loaded from `conf/ue_placement.conf` via `--ue-placement`.
+**Used by:** currently not used for placements; placements are loaded from `conf/ue_placement.conf` via `--ue-placment`.
 
 Example objective: keep empty object `{}` while driving placements from the dedicated file.
 
@@ -39,12 +39,14 @@ Example objective: keep empty object `{}` while driving placements from the dedi
 - `duration_s`: iperf traffic run duration.
 - `by_operator.<op_id>.pod` / `.port`: traffic endpoint per operator.
 
-Example objective: increase initial offered load from 70 to 90 Mbps for stress tests.
+Example objective: increase initial offered load from 70→90 Mbps for stress tests.
+
 
 ### UE placement file (`conf/ue_placement.conf`)
 - Source of truth for UE startup entries.
 - Each entry supports: `pod`, `logical_id`, `gnb_id`, `gnb_ip`, `conf`, `port`, `initial_rate_mbps`.
-- Main loop loads this file with `--ue-placement` and calls `configure_ue_settings({"placements": ...})`.
+- Main loop loads this file with `--ue-placment/--ue-placement` and calls `configure_ue_settings({"placements": ...})`.
+
 
 ### Multi-UE metric aggregation (runtime behavior)
 - Per indication, UE entries from `UE_LIST` are aggregated into a single synthetic per-gNB sample before `GnbState.compute_metrics(...)`.
@@ -90,7 +92,19 @@ Example objective: cap aggressive per-tick rate change during live demos.
 
 Example objective: wait first N reports before any steering decision.
 
-## 6) `pricing` (in background_traffic_gnb.json)
+## 6) `bmin_prb`
+**Objective:** guaranteed PRB baseline used in pricing calculations.
+**Used by:** pricing application logic before broker cost view.
+
+Example objective: test impact of higher guaranteed baseline for one operator.
+
+## 7) `min_prb`
+**Objective:** minimum PRB floor when translating cap to slice min ratio.
+**Used by:** CAP planning in `xapp_runtime/cap_runtime.py`.
+
+Example objective: keep an operator from dropping below a minimum ratio under low cap.
+
+## 8) `pricing` (moved)
 **Location:** `conf/background_traffic_gnb.json` under `pricing.ops`.
 **Used by:** `PriceModel.from_config_dict(...)` in runtime, loaded from traffic config in `xapp_main.py`.
 
@@ -110,3 +124,6 @@ Behavior note:
 - Both modes read config.
 - `clamp_throughput_enabled` and `clamp_throughput_mbps` are applied only in static mode (`--static`).
 - Dynamic mode always uses unclamped throughput for decisions and persisted metrics.
+
+
+- CLI: `--ue-debug` prints UE-level KPI-style rows (throughput/demand/gap/PRBs) instead of the gNB summary table (runtime logic unchanged).

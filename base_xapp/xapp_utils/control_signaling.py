@@ -73,3 +73,36 @@ def send_slice_ctrl(sock, meid: str, sst=1, sd=2, min_ratio=20, max_ratio=80):
     return min_ratio, max_ratio
 
 
+def summarize_param_map(resp):
+    print("[MAP] Listing parameters in indication response:")
+    for entry in resp.param_map:
+        try:
+            key_name = ran_messages_pb2.RAN_parameter.Name(entry.key)
+        except ValueError:
+            key_name = str(entry.key)
+        value_case = entry.WhichOneof("value") or "<unset>"
+        detail = ""
+        if value_case == "ue_list":
+            detail = f"connected_ues={entry.ue_list.connected_ues}, entries={len(entry.ue_list.ue_info)}"
+        elif value_case == "slicing_ctrl":
+            detail = f"sst={entry.slicing_ctrl.sst}, min={entry.slicing_ctrl.min_ratio}, max={entry.slicing_ctrl.max_ratio}"
+        elif value_case == "sche_ctrl":
+            detail = f"max_cell_allocable_prbs={get_optional(entry.sche_ctrl, 'max_cell_allocable_prbs', 'n/a')}"
+        elif value_case == "string_value":
+            detail = entry.string_value
+        elif value_case == "int64_value":
+            detail = str(entry.int64_value)
+        elif value_case == "bool_value":
+            detail = str(entry.bool_value)
+        print(f"  - {key_name}: {value_case} {detail}")
+
+
+def get_optional(msg, field: str, default=None):
+    try:
+        if msg.HasField(field):
+            return getattr(msg, field)
+    except ValueError:
+        # Some fields are not presence-tracked (repeated/int default)
+        if hasattr(msg, field):
+            return getattr(msg, field)
+    return default

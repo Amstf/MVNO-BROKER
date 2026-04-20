@@ -140,6 +140,19 @@ exit 0
     print(f"[UE][IPERF][ENSURE] {pod_name}:\n{out}")
 
 
+def stop_ue_traffic(pod_name: str, *, port: Optional[int] = None, dn_ip: str = DN_IP_DEFAULT) -> None:
+    if port is None:
+        port = POD_PORT_MAP.get(pod_name, 5502)
+    cmd = f"""
+set -euxo pipefail
+# Stop any iperf3 client for this DN+port (best effort)
+pkill -f "[i]perf3 -c {dn_ip} -p {port}" || true
+echo "[stop_ue_traffic] done"
+"""
+    out = _exec_in_ue_pod(pod_name, cmd)
+    print(f"[UE][IPERF][STOP] {pod_name}:\n{out}")
+
+
 def start_ue_traffic(
     pod_name: str,
     *,
@@ -230,6 +243,24 @@ echo $! > "$PIDFILE"
         print(f"[UE][IPERF][START] {pod_name} -> {dn_ip}:{port}:\n{out}")
 
 
+def tail_ue_traffic_logs(pod_name: str, port: Optional[int] = None) -> None:
+    if port is None:
+        port = POD_PORT_MAP.get(pod_name, 5502)
+
+    cmd = f"""
+set -euo pipefail
+echo "===== [xApp] TAIL UE IPERF LOGS pod={pod_name} port={port} ====="
+echo "----- /tmp/{pod_name}_iperf_debug.log -----"
+tail -n 200 /tmp/{pod_name}_iperf_debug.log 2>/dev/null || true
+echo "----- iperf log (port) -----"
+tail -n 200 /tmp/{pod_name}_iperf_*p{port}.log 2>/dev/null || true
+echo "----- list all iperf logs -----"
+ls -lah /tmp/{pod_name}_iperf_*.log 2>/dev/null || true
+"""
+    out = _exec_in_ue_pod(pod_name, cmd)
+    print(f"[UE][IPERF][TAIL] {pod_name}:\n{out}")
+
+
 def stop_ue_in_pod(pod_name: str, *, direct_move_safe_stop: bool = False):
     global core_v1
     if core_v1 is None:
@@ -309,6 +340,40 @@ def check_iface_in_pod(pod_name: str, iface: str = "oaitun_ue1") -> bool:
         return False
 
 
+def move_ue(pod_name: str, target_gnb_ip: str, conf_file: Optional[str] = None):
+    """
+    Move a UE pod to a target gNB IP, restarting its UE process.
+    If conf_file is omitted, the function reuses the configured conf for that pod.
+    """
+    placement = next((p for p in ue_settings.get("placements", []) if p.get("pod") == pod_name), None)
+    logical_id = placement.get("logical_id", pod_name) if placement else pod_name
+    conf = conf_file or (placement.get("conf") if placement else None)
+
+    print(f"[MOVE] Moving {logical_id} ({pod_name}) to gNB {target_gnb_ip} with conf={conf}")
+
+    # Inform identity layer about the move intent before the actual move
+    try:
+        mark_ue_moving(logical_id, canonicalize_gnb_id(target_gnb_ip))
+    except Exception as exc:  # noqa: BLE001
+        print(f"[MOVE][WARN] Failed to mark UE moving in identity map: {exc}")
+
+    stop_ue_in_pod(pod_name)
+    start_ue_in_pod(pod_name, target_gnb_ip, conf or "")
+
+
+def swap_ue(pod_name: str, target_gnb_ip: Optional[str] = None, conf_file: Optional[str] = None):
+    """
+    Convenience wrapper to move any UE pod to a target gNB IP (defaults to its configured IP if omitted).
+    """
+    if target_gnb_ip is None:
+        placement = next((p for p in ue_settings.get("placements", []) if p.get("pod") == pod_name), None)
+        target_gnb_ip = placement.get("gnb_ip") if placement else None
+    if target_gnb_ip is None:
+        print(f"[SWAP] No target IP provided for {pod_name}; skipping.")
+        return
+    move_ue(pod_name, target_gnb_ip, conf_file)
+
+
 def cleanup_ues():
     print("[CLEANUP] Stopping UE processes before exit...")
     for placement in ue_settings.get("placements", DEFAULT_PLACEMENTS):
@@ -319,3 +384,12 @@ def cleanup_ues():
             print(f"[CLEANUP] Error stopping {pod}: {e}")
 
 
+def get_optional(msg, field: str, default=None):
+    try:
+        if msg.HasField(field):
+            return getattr(msg, field)
+    except ValueError:
+        # Some fields are not presence-tracked (repeated/int default)
+        if hasattr(msg, field):
+            return getattr(msg, field)
+    return default
