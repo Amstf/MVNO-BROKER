@@ -23,6 +23,8 @@ SCHEMA_FILE="${XAPP_ROOT}/xapp_bs_connector/init/schema.json"
 
 CHARTS_DIR="${ONBOARDER_DIR}/charts"
 CHART_PACKAGE="oranslice-xapp-1.0.0.tgz"
+CHARTMUSEUM_CONTAINER_NAME="chartmuseum"
+CHART_REPO_URL="http://0.0.0.0:8090"
 
 ############################################
 # Helpers
@@ -45,9 +47,7 @@ fi
 
 log "Cleaning leftover pods (if any)"
 
-# Try by label first (if chart uses app label)
 kubectl delete pods -n "${XAPP_NAMESPACE}" -l "app=${XAPP_NAME}" --ignore-not-found=true || true
-# Fallback: direct grep
 PODS=$(kubectl get pods -n "${XAPP_NAMESPACE}" --no-headers 2>/dev/null | awk "/${XAPP_NAME}/ {print \$1}" || true)
 if [ -n "${PODS}" ]; then
   echo "${PODS}" | xargs -r kubectl delete pod -n "${XAPP_NAMESPACE}" --force --grace-period=0 || true
@@ -58,9 +58,7 @@ fi
 ############################################
 log "Stopping and removing Docker containers using image ${XAPP_NAME}"
 
-# Containers whose ancestor is the named image
 CNT_IDS_1=$(docker ps -aq --filter "ancestor=${LOCAL_IMAGE}" || true)
-# Also catch by repository name match, if tag differs
 CNT_IDS_2=$(docker ps -aq --filter "ancestor=${XAPP_NAME}" || true)
 
 CNT_IDS=$(printf "%s\n%s\n" "${CNT_IDS_1:-}" "${CNT_IDS_2:-}" | sort -u | sed '/^$/d' || true)
@@ -104,12 +102,12 @@ else
 fi
 
 ############################################
-# 5. Rebuild Docker image from scratch (no cache)
+# 5. Rebuild Docker image from scratch
 ############################################
-log "Rebuilding Docker image from scratch (no cache)"
+log "Rebuilding Docker image from scratch"
 
 cd "${XAPP_ROOT}"
-docker build  -t "${LOCAL_IMAGE}" -f "${DOCKERFILE_PATH}" .
+docker build -t "${LOCAL_IMAGE}" -f "${DOCKERFILE_PATH}" .
 
 ############################################
 # 6. Tag and push to local registry
@@ -120,7 +118,31 @@ docker tag "${LOCAL_IMAGE}" "${REMOTE_IMAGE}"
 docker push "${REMOTE_IMAGE}"
 
 ############################################
-# 7. Re-onboard xApp with dms_cli
+# 7. Ensure ChartMuseum is running
+############################################
+log "Ensuring ChartMuseum is running"
+
+if ! docker ps --format '{{.Names}}' | grep -q "^${CHARTMUSEUM_CONTAINER_NAME}\$"; then
+  if docker ps -a --format '{{.Names}}' | grep -q "^${CHARTMUSEUM_CONTAINER_NAME}\$"; then
+    docker rm -f "${CHARTMUSEUM_CONTAINER_NAME}"
+  fi
+
+  docker run --rm -u 0 -it -d \
+    -p 8090:8080 \
+    --name "${CHARTMUSEUM_CONTAINER_NAME}" \
+    -e DEBUG=1 \
+    -e STORAGE=local \
+    -e STORAGE_LOCAL_ROOTDIR=/charts \
+    -v "${CHARTS_DIR}:/charts" \
+    chartmuseum/chartmuseum:latest
+else
+  echo "ChartMuseum container '${CHARTMUSEUM_CONTAINER_NAME}' is already running."
+fi
+
+export CHART_REPO_URL="${CHART_REPO_URL}"
+
+############################################
+# 8. Re-onboard xApp with dms_cli
 ############################################
 log "Re-onboarding xApp with dms_cli"
 
@@ -136,7 +158,7 @@ fi
   --shcema_file_path="${SCHEMA_FILE}"
 
 ############################################
-# 8. Reinstall Helm chart
+# 9. Reinstall Helm chart
 ############################################
 log "Installing Helm chart for ${XAPP_NAME}"
 
